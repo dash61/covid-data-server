@@ -19,6 +19,11 @@ class Server {
     // Wire up routes.
     this.app.get("/ping", this.handlePingRequest);
     this.app.post("/getDataPoints", this.handleBaselineRequest);
+    this.app.get("/getCountryData", this.handleCountryDataRequest);
+    this.app.get("/getContinents", this.handleContinentsRequest);
+    this.app.get("/getMetricNames", this.handleMetricNamesRequest);
+    this.app.post("/getOneMetric", this.handleGetOneMetricRequest);
+
     
     this.app.listen(this.port, () => {
       console.log(`The server is running on port ${this.port}.`);
@@ -41,7 +46,7 @@ class Server {
       // freshenData is the indication from the front-end to do this.
       // const getFreshData = req.body.freshenData;
 
-      console.log("Handling baseline req, req.body=", req.body);
+      // console.log("Handling baseline req, req.body=", req.body);
 
       let resultantData = {};
 
@@ -59,6 +64,36 @@ class Server {
       res.sendStatus(500);
     }
   }
+
+  handleCountryDataRequest = async (_0: Request, res: Response) : Promise<void> => {
+    const results = await this.db.getAllCountryData();
+    res.status(200).send(JSON.stringify(results));
+    res.end();
+  }
+
+  handleContinentsRequest = async (_0: Request, res: Response) : Promise<void> => {
+    const results = await this.db.getAllContinents();
+    res.status(200).send(JSON.stringify(results));
+    res.end();
+  }
+
+  handleMetricNamesRequest = async (_0: Request, res: Response) : Promise<void> => {
+    const results = await this.db.getAllMetricNames();
+    res.status(200).send(JSON.stringify(results));
+    res.end();
+  }
+
+  handleGetOneMetricRequest = async (req: Request, res: Response) : Promise<void> => {
+    const bodyOk = !detectEmptyObject(req.body);
+    if (bodyOk) {
+      const results = await this.db.getOneMetricPerCountry(req.body.metric, req.body.date);
+      res.status(200).send(JSON.stringify(results));
+      res.end();
+    } else {
+      res.sendStatus(500);
+    }
+  }
+
 }
 
 export default Server;

@@ -69,3 +69,10 @@ export interface ICovidData {
   excess_mortality: number;
   excess_mortality_cumulative_per_million: number;
 }
+
+export interface ICountryData {
+  _id: {
+    location: string;
+    iso_code: string;
+  }
+}

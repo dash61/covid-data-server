@@ -3,7 +3,7 @@ import * as path from "path";
 import * as mongodb from "mongodb";
 import { parse } from '@fast-csv/parse';
 import * as dotenv from "dotenv";
-import { ICovidData } from "../interfaces";
+import { ICovidData, ICountryData } from "../interfaces";
 import { ISODate } from "../utils";
 
 export const collections: { covid_collection?: mongodb.Collection } = {}
@@ -135,28 +135,39 @@ export class Database {
     return 0;
   }
 
-  // Get data for given metric and country and time range.
-  public async getDataPoints(metric: string, dateStart: string, dateEnd: string, countryCode: string) {
+  // Get data for given metric from each country; get the last data point.
+  // TODO - get data point for a specific time.
+  public async getOneMetricPerCountry(metric: string, date: number) {
     try {
-      console.log("getDataPoints - metric=", metric, " start=", dateStart,
-        " end=", dateEnd, " country=", countryCode);
-      
-      let metricString = "";
-      switch (metric) {
-        case "cases": metricString = "new_cases_smoothed"; break;
-        case "deaths": metricString = "new_deaths_smoothed"; break;
-        case "vacc": metricString = "new_vaccinations_smoothed"; break;
-        case "hospital": metricString = "hosp_patients"; break;
-        default: break;
-      }
-
+      const endDate = new Date(date * 1000);
+      const endTSWithoutTime = endDate.setUTCHours(0, 0, 0, 0);
+      const endDateWithoutTime = new Date(endTSWithoutTime).toISOString();
+      console.log("getOneMetricPerCountry - metric=", metric, endDateWithoutTime);
       const cursor = this.collection.aggregate([
-        { $match: { iso_code: countryCode, date: { $gte: ISODate(dateStart), $lte: ISODate(dateEnd) } } },
-        { $project: { [metricString]: 1, date: 1 } }
+        { $match: { date: { $gte: ISODate(endDateWithoutTime) } } },
+        { $project: { [metric]: 1, iso_code: 1, date: 1, _id: 0, data: metric, location: 1 } },
       ]);
 
       const result = await cursor.toArray();
-      console.log("getDataPoints, number found=", result.length);
+      console.log("getOneMetricPerCountry, number found=", result.length);
+      if (result.length) {
+        return result;
+      }
+      return 0;
+    } catch (err) {
+      console.log("getOneMetricPerCountry - EXCEPTION=", err);
+    }
+  }
+
+  // Get data for given metric and country and time range.
+  public async getDataPoints(metric: string, dateStart: string, dateEnd: string, countryCode: string) {
+    try {
+      const cursor = this.collection.aggregate([
+        { $match: { iso_code: countryCode, date: { $gte: ISODate(dateStart), $lte: ISODate(dateEnd) } } },
+        { $project: { [metric]: 1, date: 1, _id: 0, data: metric } },
+      ]);
+
+      const result = await cursor.toArray();
       if (result.length) {
         return result;
       }
@@ -184,6 +195,106 @@ export class Database {
     } catch (err) {
       console.log("getNewDeaths - EXCEPTION=", err);
     }
+  }
+
+  // Get all country name in the database - column = location
+  public async getAllCountryData(): Promise<ICountryData[]> {
+    try {
+      const cursor = this.collection.aggregate([
+        { $group: { "_id": { location: "$location", iso_code: "$iso_code" } } },
+        { $sort:{ "_id.location":1 } }
+      ]);
+      const result = await cursor.toArray();
+      console.log("getAllCountryData, number found=", result.length);
+      if (result.length) {
+        return result as unknown as ICountryData[];
+      }
+      return [];
+    } catch (err) {
+      console.log("getAllCountryData - EXCEPTION=", err);
+    }
+  }
+
+  // Get all continents in the database - column = continent
+  public async getAllContinents(): Promise<string[]> {
+    try {
+      const result = await this.collection.distinct( "continent");
+      console.log("getAllContinents, number found=", result.length);
+      if (result.length) {
+        return result;
+      }
+      return [];
+    } catch (err) {
+      console.log("getAllContinents - EXCEPTION=", err);
+    }
+  }
+
+  // TODO - make a mongodb query to get this.
+  public getAllMetricNames(): string[] {
+    return [
+        "total_cases",
+        "new_cases",
+        "new_cases_smoothed",
+        "total_deaths",
+        "new_deaths",
+        "new_deaths_smoothed",
+        "total_cases_per_million",
+        "new_cases_per_million",
+        "new_cases_smoothed_per_million",
+        "total_deaths_per_million",
+        "new_deaths_per_million",
+        "new_deaths_smoothed_per_million",
+        "reproduction_rate",
+        "icu_patients",
+        "icu_patients_per_million",
+        "hosp_patients",
+        "hosp_patients_per_million",
+        "weekly_icu_admissions",
+        "weekly_icu_admissions_per_million",
+        "weekly_hosp_admissions",
+        "weekly_hosp_admissions_per_million",
+        "total_tests",
+        "new_tests",
+        "total_tests_per_thousand",
+        "new_tests_per_thousand",
+        "new_tests_smoothed",
+        "new_tests_smoothed_per_thousand",
+        "positive_rate",
+        "tests_per_case",
+        "total_vaccinations",
+        "people_vaccinated",
+        "people_fully_vaccinated",
+        "total_boosters",
+        "new_vaccinations",
+        "new_vaccinations_smoothed",
+        "total_vaccinations_per_hundred",
+        "people_vaccinated_per_hundred",
+        "people_fully_vaccinated_per_hundred",
+        "total_boosters_per_hundred",
+        "new_vaccinations_smoothed_per_million",
+        "new_people_vaccinated_smoothed",
+        "new_people_vaccinated_smoothed_per_hundred",
+        "stringency_index",
+        "population",
+        "population_density",
+        "median_age",
+        "aged_65_older",
+        "aged_70_older",
+        "gdp_per_capita",
+        "extreme_poverty",
+        "cardiovasc_death_rate",
+        "diabetes_prevalence",
+        "female_smokers",
+        "male_smokers",
+        "handwashing_facilities",
+        "hospital_beds_per_thousand",
+        "life_expectancy",
+        "human_development_index",
+        "excess_mortality_cumulative_absolute",
+        "excess_mortality_cumulative",
+        "excess_mortality",
+        "excess_mortality_cumulative_per_million",
+    ];
   }
 
   // each country has iso_code, continent, location (name of country), date
